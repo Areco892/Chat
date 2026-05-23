@@ -8,6 +8,7 @@ const userCountEl = document.querySelector("#userCount");
 
 let socket;
 let currentUser = null;
+let serverUrlPromise = null;
 
 connect();
 showEmptyState();
@@ -28,9 +29,9 @@ nameInput.addEventListener("change", () => {
   socket.send(JSON.stringify({ type: "rename", name: nameInput.value }));
 });
 
-function connect() {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  socket = new WebSocket(`${protocol}://${window.location.host}`);
+async function connect() {
+  const webSocketUrl = await getWebSocketUrl();
+  socket = new WebSocket(webSocketUrl);
 
   setStatus("Connecting", "connecting");
 
@@ -72,6 +73,48 @@ function connect() {
     renderPresence("Connection lost. Reconnecting soon.");
     window.setTimeout(connect, 1600);
   });
+}
+
+async function getWebSocketUrl() {
+  if (!serverUrlPromise) {
+    serverUrlPromise = loadWebSocketUrl();
+  }
+
+  return serverUrlPromise;
+}
+
+async function loadWebSocketUrl() {
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+
+    if (response.ok) {
+      const config = await response.json();
+      const webSocketUrl = toWebSocketUrl(config.chatServerUrl);
+
+      if (webSocketUrl) return webSocketUrl;
+    }
+  } catch {
+    // Static/local development can still use the current host fallback.
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${window.location.host}`;
+}
+
+function toWebSocketUrl(value) {
+  const rawUrl = String(value || "").trim();
+  if (!rawUrl) return "";
+
+  try {
+    const url = new URL(rawUrl);
+
+    if (url.protocol === "https:") url.protocol = "wss:";
+    if (url.protocol === "http:") url.protocol = "ws:";
+
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function renderMessage(message) {

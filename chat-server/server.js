@@ -1,43 +1,22 @@
 const http = require("http");
-const path = require("path");
-const fs = require("fs");
 const WebSocket = require("ws");
 const room = require("./roomManager");
 
 const port = process.env.PORT || 3000;
-const clientDir = path.join(__dirname, "..", "chat-client");
-
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml"
-};
 
 const server = http.createServer((request, response) => {
-  const requestPath = request.url === "/" ? "/index.html" : request.url;
-  const filePath = path.normalize(path.join(clientDir, requestPath));
-
-  if (!filePath.startsWith(clientDir)) {
-    response.writeHead(403);
-    response.end("Forbidden");
+  if (request.url === "/" || request.url === "/health") {
+    response.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8"
+    });
+    response.end(JSON.stringify({ status: "ok" }));
     return;
   }
 
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      response.writeHead(404);
-      response.end("Not found");
-      return;
-    }
-
-    const extension = path.extname(filePath);
-    response.writeHead(200, {
-      "Content-Type": contentTypes[extension] || "application/octet-stream"
-    });
-    response.end(content);
+  response.writeHead(404, {
+    "Content-Type": "application/json; charset=utf-8"
   });
+  response.end(JSON.stringify({ error: "Not found" }));
 });
 
 const wss = new WebSocket.Server({ server });
@@ -112,7 +91,7 @@ server.on("error", (error) => {
 });
 
 server.listen(port, () => {
-  console.log(`Chat app running at http://localhost:${port}`);
+  console.log(`Chat server running at http://localhost:${port}`);
 });
 
 function broadcast(message) {
