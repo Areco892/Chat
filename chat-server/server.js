@@ -1,8 +1,10 @@
 const http = require("http");
 const WebSocket = require("ws");
+const db = require("./db");
 const room = require("./roomManager");
 
 const port = process.env.PORT || 3000;
+let chatRoomId = null;
 
 const server = http.createServer((request, response) => {
   if (request.url === "/" || request.url === "/health") {
@@ -21,19 +23,28 @@ const server = http.createServer((request, response) => {
 
 const wss = new WebSocket.Server({ server });
 
-wss.on("connection", (socket) => {
+wss.on("connection", async (socket) => {
   const user = room.addClient(socket);
+  const history = await getHistory();
+
+  if (db.isEnabled()) {
+    try {
+      user.dbId = await db.createAnonymousUser(user);
+    } catch (error) {
+      console.error("Failed to create chat user:", error);
+    }
+  }
 
   send(socket, {
     type: "welcome",
     user,
-    history: room.getHistory(),
+    history,
     users: room.getUsers()
   });
 
   broadcastPresence(`${user.name} joined`);
 
-  socket.on("message", (rawMessage) => {
+  socket.on("message", async (rawMessage) => {
     let data;
 
     try {
@@ -45,6 +56,7 @@ wss.on("connection", (socket) => {
     if (data.type === "rename") {
       const updatedUser = room.renameUser(socket, data.name);
       if (updatedUser) {
+        updateStoredUserName(updatedUser);
         broadcastPresence(`${updatedUser.name} is here`);
         broadcastUsers();
       }
@@ -57,13 +69,7 @@ wss.on("connection", (socket) => {
 
       if (!currentUser || !text) return;
 
-      const message = {
-        id: `${Date.now()}-${currentUser.id}`,
-        type: "message",
-        user: currentUser,
-        text,
-        sentAt: new Date().toISOString()
-      };
+      const message = await createMessage(currentUser, text);
 
       room.addMessage(message);
       broadcast(message);
@@ -90,8 +96,10 @@ server.on("error", (error) => {
   throw error;
 });
 
-server.listen(port, () => {
-  console.log(`Chat server running at http://localhost:${port}`);
+initializeDatabase().finally(() => {
+  server.listen(port, () => {
+    console.log(`Chat server running at http://localhost:${port}`);
+  });
 });
 
 function broadcast(message) {
@@ -133,4 +141,63 @@ function sanitizeMessage(value) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+async function initializeDatabase() {
+  if (!db.isEnabled()) {
+    console.log("DATABASE_URL is not set. Message history will use memory only.");
+    return;
+  }
+
+  try {
+    chatRoomId = await db.getDefaultRoomId();
+
+    if (!chatRoomId) {
+      console.warn("No chat room found. Create a row in chat_rooms before using database history.");
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+  }
+}
+
+async function getHistory() {
+  if (!db.isEnabled() || !chatRoomId) {
+    return room.getHistory();
+  }
+
+  try {
+    return await db.getRecentMessages(chatRoomId);
+  } catch (error) {
+    console.error("Failed to load message history:", error);
+    return room.getHistory();
+  }
+}
+
+async function createMessage(user, text) {
+  if (db.isEnabled() && chatRoomId) {
+    try {
+      const savedMessage = await db.saveMessage({ user, chatRoomId, text });
+      if (savedMessage) return savedMessage;
+    } catch (error) {
+      console.error("Failed to save message:", error);
+    }
+  }
+
+  return {
+    id: `${Date.now()}-${user.id}`,
+    type: "message",
+    user,
+    text,
+    sentAt: new Date().toISOString()
+  };
+}
+
+async function updateStoredUserName(user) {
+  if (!db.isEnabled() || !user.dbId) return;
+
+  try {
+    await db.updateUserName(user.dbId, user.name);
+  } catch (error) {
+    console.error("Failed to update user name:", error);
+  }
 }
