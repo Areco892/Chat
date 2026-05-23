@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calm Chat</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="chat-panel" aria-label="Chat room">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">One shared room</p>
+            <h1>Calm Chat</h1>
+          </div>
+          <div class="status-pill" id="connectionStatus">Connecting</div>
+        </header>
+
+        <div class="messages" id="messages" aria-live="polite"></div>
+
+        <form class="composer" id="messageForm">
+          <input
+            id="messageInput"
+            type="text"
+            maxlength="500"
+            autocomplete="off"
+            placeholder="Write a message"
+            aria-label="Message"
+          >
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <aside class="side-panel" aria-label="People in the room">
+        <label class="name-field" for="nameInput">
+          <span>Your name</span>
+          <input id="nameInput" type="text" maxlength="24" autocomplete="nickname">
+        </label>
+
+        <div>
+          <div class="side-heading">
+            <h2>Here now</h2>
+            <span id="userCount">0</span>
+          </div>
+          <ul class="user-list" id="userList"></ul>
+        </div>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
