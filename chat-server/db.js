@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 const { Pool } = require("pg");
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -15,19 +15,27 @@ function isEnabled() {
   return Boolean(pool);
 }
 
-async function createAnonymousUser(user) {
+async function getOrCreateGuestUser(user, clientId) {
   if (!pool) return null;
 
   const result = await pool.query(
     `
-      INSERT INTO users (username, password_hash, display_color)
-      VALUES ($1, $2, $3)
-      RETURNING id
+      INSERT INTO users (client_id, username, password_hash, display_color)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (client_id) WHERE client_id IS NOT NULL
+      DO UPDATE SET client_id = EXCLUDED.client_id
+      RETURNING id, username, display_color
     `,
-    [user.name, "anonymous", user.color]
+    [clientId, user.name, "anonymous", user.color]
   );
 
-  return result.rows[0].id;
+  const guest = result.rows[0];
+
+  return {
+    id: guest.id,
+    name: guest.username,
+    color: guest.display_color || user.color
+  };
 }
 
 async function updateUserName(userId, name) {
@@ -130,7 +138,7 @@ function shouldUseSsl(url) {
 
 module.exports = {
   isEnabled,
-  createAnonymousUser,
+  getOrCreateGuestUser,
   updateUserName,
   getDefaultRoomId,
   getRecentMessages,

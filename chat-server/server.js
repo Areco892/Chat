@@ -23,13 +23,18 @@ const server = http.createServer((request, response) => {
 
 const wss = new WebSocket.Server({ server });
 
-wss.on("connection", async (socket) => {
+wss.on("connection", async (socket, request) => {
   const user = room.addClient(socket);
   const history = await getHistory();
+  const clientId = getClientId(request);
 
-  if (db.isEnabled()) {
+  if (db.isEnabled() && clientId) {
     try {
-      user.dbId = await db.createAnonymousUser(user);
+      const storedUser = await db.getOrCreateGuestUser(user, clientId);
+      user.dbId = storedUser.id;
+      user.id = storedUser.id;
+      user.name = storedUser.name;
+      user.color = storedUser.color;
     } catch (error) {
       console.error("Failed to create chat user:", error);
     }
@@ -141,6 +146,21 @@ function sanitizeMessage(value) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+function getClientId(request) {
+  try {
+    const url = new URL(request.url, "ws://localhost");
+    return sanitizeClientId(url.searchParams.get("clientId"));
+  } catch {
+    return "";
+  }
+}
+
+function sanitizeClientId(value) {
+  return String(value || "")
+    .trim()
+    .slice(0, 100);
 }
 
 async function initializeDatabase() {

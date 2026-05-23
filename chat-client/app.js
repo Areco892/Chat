@@ -9,6 +9,7 @@ const userCountEl = document.querySelector("#userCount");
 let socket;
 let currentUser = null;
 let serverUrlPromise = null;
+let clientId = getClientId();
 
 connect();
 showEmptyState();
@@ -30,7 +31,7 @@ nameInput.addEventListener("change", () => {
 });
 
 async function connect() {
-  const webSocketUrl = await getWebSocketUrl();
+  const webSocketUrl = addClientId(await getWebSocketUrl());
   socket = new WebSocket(webSocketUrl);
 
   setStatus("Connecting", "connecting");
@@ -115,6 +116,30 @@ function toWebSocketUrl(value) {
   } catch {
     return "";
   }
+}
+
+function addClientId(webSocketUrl) {
+  try {
+    const url = new URL(webSocketUrl);
+    url.searchParams.set("clientId", clientId);
+    return url.toString();
+  } catch {
+    return webSocketUrl;
+  }
+}
+
+function getClientId() {
+  const storageKey = "calm-chat-client-id";
+  const existingId = window.localStorage.getItem(storageKey);
+
+  if (existingId) return existingId;
+
+  const newId = window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  window.localStorage.setItem(storageKey, newId);
+  return newId;
 }
 
 function renderMessage(message) {
